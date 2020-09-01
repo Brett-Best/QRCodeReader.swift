@@ -90,6 +90,9 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
 
   /// Block is executed when a found metadata object string could not be decoded.
   public var didFailDecoding: (() -> Void)?
+  
+  /// Block is executed when unable to add outputs. Called on the main thread.
+  public var didFailAddingOutputs: (() -> Void)?
 
   // MARK: - Creating the Code Reade
 
@@ -158,15 +161,23 @@ public final class QRCodeReader: NSObject, AVCaptureMetadataOutputObjectsDelegat
     }
 
     // Add metadata output
-    session.addOutput(metadataOutput)
-    metadataOutput.setMetadataObjectsDelegate(self, queue: metadataObjectsQueue)
-
-    let allTypes = Set(metadataOutput.availableMetadataObjectTypes)
-    let filtered = metadataObjectTypes.filter { (mediaType) -> Bool in
-      allTypes.contains(mediaType)
+    if !session.canAddOutput(metadataOutput) {
+      DispatchQueue.main.async { [weak self] in
+        self?.didFailAddingOutputs?()
+      }
+    } else {
+      session.addOutput(metadataOutput)
+      
+      metadataOutput.setMetadataObjectsDelegate(self, queue: metadataObjectsQueue)
+      
+      let allTypes = Set(metadataOutput.availableMetadataObjectTypes)
+      let filtered = metadataObjectTypes.filter { (mediaType) -> Bool in
+        allTypes.contains(mediaType)
+      }
+      
+      metadataOutput.metadataObjectTypes = filtered
     }
-
-    metadataOutput.metadataObjectTypes = filtered
+    
     previewLayer.videoGravity          = .resizeAspectFill
 
     session.commitConfiguration()
